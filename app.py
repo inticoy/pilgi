@@ -14,8 +14,7 @@ print("⏳ 최초 실행 시 모델 다운로드로 2-3분 소요됩니다...")
 pipe = pipeline(
     "automatic-speech-recognition",
     model=MODEL_NAME,
-    chunk_length_s=30,  # 30초씩 청크로 처리
-    device=-1  # CPU 사용 (HF Spaces는 자동으로 GPU 감지)
+    device=-1  # CPU 사용 (HF Spaces 무료 tier)
 )
 
 print("✅ 모델 로드 완료!")
