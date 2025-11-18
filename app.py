@@ -3,21 +3,45 @@ from transformers import pipeline
 import time
 import os
 
-# ----- Distil-Whisper 모델 로드 (전역으로 한 번만) -----
+# ----- 모델 설정 -----
 # 다른 모델로 교체 가능:
 # - "distil-whisper/distil-large-v3" (추천, 빠름)
 # - "openai/whisper-large-v3" (더 정확하지만 느림)
 # - "openai/whisper-turbo" (8배 빠름)
 MODEL_NAME = "distil-whisper/distil-large-v3"
 
-print(f"Loading model: {MODEL_NAME}...")
-pipe = pipeline(
-    "automatic-speech-recognition",
-    model=MODEL_NAME,
-    chunk_length_s=30,  # 30초씩 청크로 처리
-    device=-1  # CPU 사용 (GPU: 0)
-)
-print("Model loaded successfully!")
+# 전역 변수: 모델 파이프라인 (처음엔 None)
+pipe = None
+
+
+def download_model(progress=gr.Progress()):
+    """모델을 다운로드하고 로드하는 함수"""
+    global pipe
+
+    if pipe is not None:
+        yield "✅ 모델이 이미 로드되어 있습니다!"
+        return
+
+    try:
+        progress(0, desc="모델 다운로드 준비 중...")
+        yield "🔄 모델 다운로드 시작...\n(최초 1회만, 약 1.5GB, 2-5분 소요)"
+
+        progress(0.2, desc="Distil-Whisper 다운로드 중...")
+        yield "🔄 Distil-Whisper Large v3 다운로드 중...\n(잠시만 기다려주세요)"
+
+        # 모델 로드
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=MODEL_NAME,
+            chunk_length_s=30,  # 30초씩 청크로 처리
+            device=-1  # CPU 사용 (GPU: 0)
+        )
+
+        progress(1.0, desc="완료!")
+        yield "✅ 모델 다운로드 및 로드 완료!\n이제 음성 파일을 전사할 수 있습니다."
+
+    except Exception as e:
+        yield f"❌ 모델 로드 실패: {str(e)}\n\n다시 시도해주세요."
 
 
 def transcribe_streaming(audio_file, progress=gr.Progress()):
@@ -26,8 +50,15 @@ def transcribe_streaming(audio_file, progress=gr.Progress()):
     progress: Gradio Progress tracker
     yield: 실시간으로 전사된 텍스트를 단어 단위로 스트리밍
     """
+    global pipe
+
     if audio_file is None:
         yield "파일을 업로드해주세요."
+        return
+
+    # 모델이 로드되지 않았으면 에러
+    if pipe is None:
+        yield "❌ 먼저 '모델 다운로드' 버튼을 클릭하여 모델을 로드해주세요!"
         return
 
     start_time = time.time()
@@ -35,7 +66,7 @@ def transcribe_streaming(audio_file, progress=gr.Progress()):
     try:
         # 초기 상태 표시
         progress(0, desc="전사 준비 중...")
-        yield "🔄 전사 시작 중...\n(처음 실행 시 모델 다운로드로 2-3분 소요될 수 있습니다)"
+        yield "🔄 전사 시작 중..."
 
         # 청크 단위로 처리 (30초씩)
         progress(0.3, desc="음성 분석 중...")
@@ -95,6 +126,23 @@ with gr.Blocks(title="pilgi — 필기를 텍스트로", theme=gr.themes.Soft())
         """
     )
 
+    # 모델 다운로드 섹션
+    with gr.Row():
+        download_model_btn = gr.Button(
+            "📥 모델 다운로드 (최초 1회 필수)",
+            variant="secondary",
+            size="lg"
+        )
+
+    model_status = gr.Textbox(
+        label="모델 상태",
+        value="⚠️ 모델 미설치 - 위 버튼을 클릭하여 다운로드하세요",
+        lines=3,
+        interactive=False
+    )
+
+    gr.Markdown("---")
+
     # 파일 업로드
     audio_input = gr.Audio(
         sources=["upload", "microphone"],
@@ -122,6 +170,14 @@ with gr.Blocks(title="pilgi — 필기를 텍스트로", theme=gr.themes.Soft())
         )
 
     # 이벤트 연결
+    # 모델 다운로드 버튼
+    download_model_btn.click(
+        fn=download_model,
+        inputs=None,
+        outputs=model_status
+    )
+
+    # 전사 버튼
     transcribe_btn.click(
         fn=transcribe_streaming,
         inputs=audio_input,
