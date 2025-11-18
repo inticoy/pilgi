@@ -4,8 +4,9 @@ import time
 import os
 
 # ----- 모델 설정 -----
-# Whisper Turbo: 2024년 최신, 8배 빠름, 다국어 지원
-MODEL_NAME = "openai/whisper-large-v3-turbo"
+# Whisper Base: CPU 최적화, 빠른 처리, 다국어 지원
+# HF Spaces 무료 tier는 CPU만 제공되므로 가벼운 모델 사용
+MODEL_NAME = "openai/whisper-base"
 
 print(f"🔄 모델 로드 중: {MODEL_NAME}...")
 print("⏳ 최초 실행 시 모델 다운로드로 2-3분 소요됩니다...")
@@ -14,8 +15,7 @@ print("⏳ 최초 실행 시 모델 다운로드로 2-3분 소요됩니다...")
 pipe = pipeline(
     "automatic-speech-recognition",
     model=MODEL_NAME,
-    chunk_length_s=30,  # 30초씩 청크로 처리
-    device=-1  # CPU 사용 (HF Spaces는 자동으로 GPU 감지)
+    device=-1  # CPU 사용 (HF Spaces 무료 tier)
 )
 
 print("✅ 모델 로드 완료!")
@@ -74,7 +74,7 @@ def transcribe_streaming(audio_file, progress=gr.Progress()):
 
         # 마지막에 메타데이터 추가
         elapsed = time.time() - start_time
-        final_text = current_text.strip() + f"\n\n---\n✅ 완료 | 모델: Whisper Turbo | 처리 시간: {elapsed:.1f}초"
+        final_text = current_text.strip() + f"\n\n---\n✅ 완료 | 모델: Whisper Base (CPU 최적화) | 처리 시간: {elapsed:.1f}초"
         progress(1.0, desc="완료!")
         yield final_text
 
@@ -90,7 +90,7 @@ with gr.Blocks(title="pilgi — 필기를 텍스트로", theme=gr.themes.Soft())
         # 📝 pilgi — 필기를 텍스트로
         모든 음성/비디오를 텍스트로 변환합니다.
 
-        **지원 형식**: mp3, wav, m4a, mp4, mov 등 | **다국어 자동 인식** | **Whisper Turbo (최신, 8배 빠름)**
+        **지원 형식**: mp3, wav, m4a, mp4, mov 등 | **다국어 자동 인식** | **Whisper Base (CPU 최적화)**
         """
     )
 

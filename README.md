@@ -18,7 +18,7 @@ short_description: 필기를 텍스트로 - Universal Transcription
 
 - 🎙️ **실시간 스트리밍 전사**: ChatGPT 스타일로 단어 단위 실시간 출력
 - 🌍 **다국어 자동 인식**: 한국어, 영어, 일본어, 중국어 등 모든 언어 지원
-- ⚡ **빠른 처리**: Distil-Whisper 모델로 6배 빠른 전사
+- ⚡ **빠른 처리**: Whisper Base 모델 (CPU 환경 최적화)
 - 📋 **간편한 복사/다운로드**: Copy 버튼과 TXT 다운로드 지원
 - 🎵 **다양한 형식 지원**: mp3, wav, m4a, mp4, mov 등
 
@@ -31,9 +31,10 @@ short_description: 필기를 텍스트로 - Universal Transcription
 
 ## 🔧 기술 스택
 
-- **모델**: Distil-Whisper Large v3 (Hugging Face Transformers)
-- **프레임워크**: Gradio 4.0+
-- **처리 방식**: 청크 기반 비동기 스트리밍
+- **모델**: Whisper Base (openai/whisper-base) - 74M params, CPU 최적화
+- **프레임워크**: Gradio 5.0+
+- **처리 방식**: 실시간 스트리밍 출력
+- **환경**: HuggingFace Spaces (CPU)
 
 ## 🎯 로드맵
 
