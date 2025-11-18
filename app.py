@@ -1,21 +1,21 @@
 import gradio as gr
-from transformers import pipeline
+from faster_whisper import WhisperModel
 import time
 import os
 
 # ----- 모델 설정 -----
-# Whisper Tiny: CPU 초고속 최적화, 다국어 지원
-# HF Spaces 무료 tier는 CPU만 제공되므로 가장 가벼운 모델 사용
-MODEL_NAME = "openai/whisper-tiny"
+# Faster-Whisper: CTranslate2 기반, 3-4배 빠름, 다국어 지원
+# HF Spaces 무료 tier는 CPU만 제공되므로 CPU 최적화 모델 사용
+MODEL_SIZE = "tiny"
 
-print(f"🔄 모델 로드 중: {MODEL_NAME}...")
-print("⏳ 최초 실행 시 모델 다운로드로 2-3분 소요됩니다...")
+print(f"🔄 모델 로드 중: Faster-Whisper {MODEL_SIZE}...")
+print("⏳ 최초 실행 시 모델 다운로드로 1-2분 소요됩니다...")
 
-# HF Spaces에서 자동 로드
-pipe = pipeline(
-    "automatic-speech-recognition",
-    model=MODEL_NAME,
-    device=-1  # CPU 사용 (HF Spaces 무료 tier)
+# Faster-Whisper 모델 로드 (INT8 양자화로 더 빠르게)
+model = WhisperModel(
+    MODEL_SIZE,
+    device="cpu",
+    compute_type="int8"  # INT8 양자화 (속도 2배, 정확도 동일)
 )
 
 print("✅ 모델 로드 완료!")
@@ -36,19 +36,22 @@ def transcribe_streaming(audio_file, progress=gr.Progress()):
     try:
         # 초기 상태 표시
         progress(0, desc="전사 중...")
-        yield "🔄 음성을 텍스트로 변환하는 중...\n(파일 길이에 따라 10초~1분 소요)"
+        yield "🔄 음성을 텍스트로 변환하는 중...\n(Faster-Whisper로 3-4배 빠른 처리)"
 
-        # Whisper Turbo로 전사 (blocking - 이 부분에서 시간이 걸림)
-        result = pipe(
+        # Faster-Whisper로 전사 (자동 언어 감지)
+        segments, info = model.transcribe(
             audio_file,
-            return_timestamps=True,
-            generate_kwargs={"language": None}  # 자동 언어 감지
+            language=None,  # 자동 언어 감지
+            vad_filter=True,  # 음성 감지 필터 (더 정확함)
+            vad_parameters=dict(min_silence_duration_ms=500)
         )
 
-        progress(0.7, desc="결과 준비 중...")
+        progress(0.3, desc="텍스트 추출 중...")
 
-        # 전체 텍스트 추출
-        full_text = result["text"].strip()
+        # 전체 텍스트 추출 (segments는 generator)
+        full_text = " ".join([segment.text for segment in segments]).strip()
+
+        progress(0.7, desc="결과 준비 중...")
 
         if not full_text:
             yield "[전사 결과 없음]"
@@ -74,7 +77,8 @@ def transcribe_streaming(audio_file, progress=gr.Progress()):
 
         # 마지막에 메타데이터 추가
         elapsed = time.time() - start_time
-        final_text = current_text.strip() + f"\n\n---\n✅ 완료 | 모델: Whisper Tiny (초고속) | 처리 시간: {elapsed:.1f}초"
+        detected_lang = info.language if hasattr(info, 'language') else "unknown"
+        final_text = current_text.strip() + f"\n\n---\n✅ 완료 | 모델: Faster-Whisper Tiny (INT8) | 언어: {detected_lang} | 처리 시간: {elapsed:.1f}초"
         progress(1.0, desc="완료!")
         yield final_text
 
@@ -90,7 +94,7 @@ with gr.Blocks(title="pilgi — 필기를 텍스트로", theme=gr.themes.Soft())
         # 📝 pilgi — 필기를 텍스트로
         모든 음성/비디오를 텍스트로 변환합니다.
 
-        **지원 형식**: mp3, wav, m4a, mp4, mov 등 | **다국어 자동 인식** | **Whisper Tiny (초고속)**
+        **지원 형식**: mp3, wav, m4a, mp4, mov 등 | **다국어 자동 인식** | **Faster-Whisper (3-4배 빠름)**
         """
     )
 
