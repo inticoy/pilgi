@@ -3,26 +3,28 @@ from transformers import pipeline
 import time
 import os
 
-# ----- Distil-Whisper 모델 로드 (전역으로 한 번만) -----
-# 다른 모델로 교체 가능:
-# - "distil-whisper/distil-large-v3" (추천, 빠름)
-# - "openai/whisper-large-v3" (더 정확하지만 느림)
-# - "openai/whisper-turbo" (8배 빠름)
-MODEL_NAME = "distil-whisper/distil-large-v3"
+# ----- 모델 설정 -----
+# Whisper Turbo: 2024년 최신, 8배 빠름, 다국어 지원
+MODEL_NAME = "openai/whisper-large-v3-turbo"
 
-print(f"Loading model: {MODEL_NAME}...")
+print(f"🔄 모델 로드 중: {MODEL_NAME}...")
+print("⏳ 최초 실행 시 모델 다운로드로 2-3분 소요됩니다...")
+
+# HF Spaces에서 자동 로드
 pipe = pipeline(
     "automatic-speech-recognition",
     model=MODEL_NAME,
     chunk_length_s=30,  # 30초씩 청크로 처리
-    device=-1  # CPU 사용 (GPU: 0)
+    device=-1  # CPU 사용 (HF Spaces는 자동으로 GPU 감지)
 )
-print("Model loaded successfully!")
+
+print("✅ 모델 로드 완료!")
 
 
-def transcribe_streaming(audio_file):
+def transcribe_streaming(audio_file, progress=gr.Progress()):
     """
     audio_file: Gradio가 넘겨주는 오디오 파일 경로 (str)
+    progress: Gradio Progress tracker
     yield: 실시간으로 전사된 텍스트를 단어 단위로 스트리밍
     """
     if audio_file is None:
@@ -31,16 +33,19 @@ def transcribe_streaming(audio_file):
 
     start_time = time.time()
 
-    # 초기 상태 표시
-    yield "🔄 전사 시작 중..."
-
     try:
-        # 청크 단위로 처리 (30초씩)
+        # 초기 상태 표시
+        progress(0, desc="전사 중...")
+        yield "🔄 음성을 텍스트로 변환하는 중...\n(파일 길이에 따라 10초~1분 소요)"
+
+        # Whisper Turbo로 전사 (blocking - 이 부분에서 시간이 걸림)
         result = pipe(
             audio_file,
             return_timestamps=True,
             generate_kwargs={"language": None}  # 자동 언어 감지
         )
+
+        progress(0.7, desc="결과 준비 중...")
 
         # 전체 텍스트 추출
         full_text = result["text"].strip()
@@ -50,6 +55,7 @@ def transcribe_streaming(audio_file):
             return
 
         # ChatGPT 스타일: 단어 단위로 스트리밍 출력
+        progress(0.8, desc="결과 출력 중...")
         words = full_text.split()
         current_text = ""
 
@@ -58,15 +64,23 @@ def transcribe_streaming(audio_file):
             yield current_text
 
             # 부드러운 애니메이션 (단어마다 약간의 딜레이)
-            time.sleep(0.03)
+            # Turbo 모델이라 더 빠르게 출력
+            time.sleep(0.02)
+
+            # Progress 업데이트
+            if i % 5 == 0:  # 5단어마다 업데이트 (성능 최적화)
+                progress_val = 0.8 + (0.2 * (i + 1) / len(words))
+                progress(progress_val, desc=f"출력 중... ({i+1}/{len(words)} 단어)")
 
         # 마지막에 메타데이터 추가
         elapsed = time.time() - start_time
-        final_text = current_text.strip() + f"\n\n---\n✅ 완료 | 모델: {MODEL_NAME.split('/')[-1]} | 처리 시간: {elapsed:.1f}초"
+        final_text = current_text.strip() + f"\n\n---\n✅ 완료 | 모델: Whisper Turbo | 처리 시간: {elapsed:.1f}초"
+        progress(1.0, desc="완료!")
         yield final_text
 
     except Exception as e:
-        yield f"❌ 오류 발생: {str(e)}"
+        error_msg = f"❌ 오류 발생: {str(e)}\n\n디버그 정보:\n- 파일: {audio_file}\n- 오류 타입: {type(e).__name__}"
+        yield error_msg
 
 
 # ----- Gradio UI 구성 -----
@@ -76,7 +90,7 @@ with gr.Blocks(title="pilgi — 필기를 텍스트로", theme=gr.themes.Soft())
         # 📝 pilgi — 필기를 텍스트로
         모든 음성/비디오를 텍스트로 변환합니다.
 
-        **지원 형식**: mp3, wav, m4a, mp4, mov 등 | **다국어 자동 인식**
+        **지원 형식**: mp3, wav, m4a, mp4, mov 등 | **다국어 자동 인식** | **Whisper Turbo (최신, 8배 빠름)**
         """
     )
 
